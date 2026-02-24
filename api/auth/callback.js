@@ -31,7 +31,7 @@ module.exports.default = async function handler(req, res) {
     }
 
     // Pass token back to frontend via URL hash (never stored server-side)
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontendUrl = process.env.FRONTEND_URL || 'http://127.0.0.1:3001/api/auth/callback';
     return res.redirect(
       `${frontendUrl}/?access_token=${tokens.access_token}&expires_in=${tokens.expires_in}`
     );
