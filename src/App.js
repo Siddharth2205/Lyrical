@@ -346,7 +346,7 @@ export default function App() {
   }
 
   function loginWithSpotify() {
-    window.location.href = 'http://127.0.0.1:3001/api/auth/login';
+    window.location.href = process.env.REACT_APP_API_URL + '/api/auth/login';
   }
 
   return (
