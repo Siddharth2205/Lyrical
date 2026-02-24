@@ -14,12 +14,12 @@ import traceback
 load_dotenv()
 
 # ── Logging setup ────────────────────────────────────────────────────────────
+# NEW
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler("lyrixa.log")
+        logging.StreamHandler()
     ]
 )
 log = logging.getLogger(__name__)
