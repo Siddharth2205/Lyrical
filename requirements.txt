@@ -1,0 +1,6 @@
+flask==3.1.0
+spotipy==2.24.0
+syncedlyrics==1.0.1
+groq==0.13.0
+python-dotenv==1.0.1
+requests==2.32.3
