@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Lyrica — Transliterate Any Song</title>
+  <title>Lyrixa — Transliterate Any Song</title>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet"/>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -127,7 +127,7 @@
       font-family: var(--font-body);
       font-size: 1rem;
       font-weight: 400;
-      padding: 1rem 5rem 1rem 1.5rem;
+      padding: 1rem 3rem 1rem 1.5rem;
       border-radius: 4px;
       outline: none;
       transition: border-color 0.2s;
@@ -135,31 +135,24 @@
 
     .search-wrap input::placeholder { color: var(--muted); }
 
-    .search-wrap input:focus {
-      border-color: var(--accent);
-    }
+    .search-wrap input:focus { border-color: var(--accent); }
 
-    .search-wrap button {
+    /* Spinner */
+    .search-spinner {
       position: absolute;
-      right: 0.5rem;
+      right: 1rem;
       top: 50%;
       transform: translateY(-50%);
-      background: var(--accent);
-      color: #0a0a0f;
-      font-family: var(--font-display);
-      font-size: 1rem;
-      letter-spacing: 0.08em;
-      border: none;
-      padding: 0.55rem 1.2rem;
-      border-radius: 2px;
-      cursor: pointer;
-      transition: background 0.15s, transform 0.15s;
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      display: none;
+      animation: spin 0.6s linear infinite;
     }
 
-    .search-wrap button:hover {
-      background: #fff;
-      transform: translateY(-50%) scale(1.03);
-    }
+    @keyframes spin { to { transform: translateY(-50%) rotate(360deg); } }
 
     /* Search results */
     #search-results {
@@ -446,7 +439,7 @@
 
   <div class="search-wrap">
     <input type="text" id="search-input" placeholder="Search for a song or artist..." autocomplete="off"/>
-    <button onclick="searchTracks()">SEARCH</button>
+    <div class="search-spinner" id="search-spinner"></div>
   </div>
 
   <div id="search-results"></div>
@@ -496,53 +489,113 @@
 
 <script>
   let currentView = 'both';
+  let debounceTimer = null;
+  let lastQuery = '';
 
-  // Search on Enter key
-  document.getElementById('search-input').addEventListener('keydown', e => {
-    if (e.key === 'Enter') searchTracks();
+  const searchInput = document.getElementById('search-input');
+  const resultsEl  = document.getElementById('search-results');
+  const spinner    = document.getElementById('search-spinner');
+
+  // ── Live search: debounce 300ms ──────────────────────────────────────────
+  searchInput.addEventListener('input', () => {
+    const q = searchInput.value.trim();
+
+    // Clear dropdown if input is empty
+    if (!q) {
+      closeResults();
+      return;
+    }
+
+    // Don't re-fetch same query
+    if (q === lastQuery) return;
+
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => fetchSuggestions(q), 300);
   });
 
-  async function searchTracks() {
-    const q = document.getElementById('search-input').value.trim();
-    if (!q) return;
+  // Close dropdown on Escape
+  searchInput.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeResults();
+  });
 
-    const resultsEl = document.getElementById('search-results');
-    resultsEl.innerHTML = '<div class="track-item"><div class="track-info"><div class="track-name" style="color:var(--muted)">Searching...</div></div></div>';
+  // Close dropdown when clicking outside
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.search-wrap') && !e.target.closest('#search-results')) {
+      closeResults();
+    }
+  });
+
+  // Re-open dropdown on focus if there's a query
+  searchInput.addEventListener('focus', () => {
+    if (searchInput.value.trim() && resultsEl.children.length) {
+      resultsEl.style.display = 'block';
+    }
+  });
+
+  async function fetchSuggestions(q) {
+    lastQuery = q;
+    spinner.style.display = 'block';
     resultsEl.style.display = 'block';
+    resultsEl.innerHTML = `
+      <div class="track-item">
+        <div class="track-info">
+          <div class="track-name" style="color:var(--muted)">Searching...</div>
+        </div>
+      </div>`;
 
     try {
       const res = await fetch(`/search?q=${encodeURIComponent(q)}`);
       const tracks = await res.json();
 
-      if (!tracks.length) {
-        resultsEl.innerHTML = '<div class="track-item"><div class="track-info"><div class="track-name" style="color:var(--muted)">No results found.</div></div></div>';
+      // Abort if the input changed while we were fetching
+      if (searchInput.value.trim() !== q) return;
+
+      spinner.style.display = 'none';
+
+      if (!tracks.length || tracks.error) {
+        resultsEl.innerHTML = `
+          <div class="track-item">
+            <div class="track-info">
+              <div class="track-name" style="color:var(--muted)">No results for "${escapeHtml(q)}"</div>
+            </div>
+          </div>`;
         return;
       }
 
       resultsEl.innerHTML = tracks.map(t => `
-        <div class="track-item">
-          ${t.album_art ? `<img src="${t.album_art}" alt="art"/>` : '<div style="width:44px;height:44px;background:var(--border);border-radius:2px;flex-shrink:0"></div>'}
+        <div class="track-item" onclick="selectTrack('${t.id}')">
+          ${t.album_art
+            ? `<img src="${t.album_art}" alt="art"/>`
+            : `<div style="width:44px;height:44px;background:var(--border);border-radius:2px;flex-shrink:0"></div>`}
           <div class="track-info">
-            <div class="track-name">${t.name}</div>
-            <div class="track-artist">${t.artist}</div>
+            <div class="track-name">${escapeHtml(t.name)}</div>
+            <div class="track-artist">${escapeHtml(t.artist)}</div>
           </div>
-          <button class="track-select-btn" onclick="selectTrack('${t.id}', '${escapeAttr(t.name)}', '${escapeAttr(t.artist)}')">SELECT</button>
+          <button class="track-select-btn">SELECT</button>
         </div>
       `).join('');
+
     } catch {
-      resultsEl.innerHTML = '<div class="track-item"><div class="track-info"><div class="track-name" style="color:var(--accent2)">Error fetching results.</div></div></div>';
+      spinner.style.display = 'none';
+      resultsEl.innerHTML = `
+        <div class="track-item">
+          <div class="track-info">
+            <div class="track-name" style="color:var(--accent2)">Error fetching results.</div>
+          </div>
+        </div>`;
     }
   }
 
-  function escapeAttr(str) {
-    return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+  function closeResults() {
+    resultsEl.style.display = 'none';
+    spinner.style.display = 'none';
   }
 
-  async function selectTrack(trackId, name, artist) {
-    // Hide search results
-    document.getElementById('search-results').style.display = 'none';
+  // ── Select a track ────────────────────────────────────────────────────────
+  async function selectTrack(trackId) {
+    closeResults();
+    searchInput.blur();
 
-    // Show loading
     hide('result'); hide('error');
     show('loading');
 
@@ -560,7 +613,6 @@
         return;
       }
 
-      // Populate result
       document.getElementById('album-art').src = data.album_art || '';
       document.getElementById('album-art').style.display = data.album_art ? 'block' : 'none';
       document.getElementById('song-title').textContent = data.title;
@@ -568,20 +620,27 @@
       document.getElementById('original-lyrics').innerHTML = formatLyrics(data.original);
       document.getElementById('transliterated-lyrics').innerHTML = formatLyrics(data.transliterated);
 
+      // Update input to show selected track name
+      searchInput.value = `${data.title} — ${data.artist}`;
+      lastQuery = '';
+
       hide('loading');
       setView('both');
       show('result');
       document.getElementById('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-    } catch (err) {
+    } catch {
       showError('Network error. Is the server running?');
     }
   }
 
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function escapeHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
   function formatLyrics(text) {
-    // Style [Verse], [Chorus] etc as section headers
-    return text
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    return escapeHtml(text)
       .replace(/\[([^\]]+)\]/g, '<span class="section-header">[$1]</span>');
   }
 
